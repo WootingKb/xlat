@@ -63,6 +63,7 @@ typedef enum {
 
 /** @brief USB Host initialization function. */
 void MX_USB_HOST_Init(void);
+void MX_USB_HOST_ReEnumeration(void);
 
 void usb_host_set_product_string(const char * product);
 char * usb_host_get_product_string(void);

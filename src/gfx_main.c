@@ -25,20 +25,26 @@
 #include "stdio_glue.h"
 #include "usb_host.h"
 
-#define Y_CHART_SIZE_X 410
+#define Y_CHART_SIZE_X 310
 #define Y_CHART_SIZE_Y 130
 
 #define Y_CHART_RANGE 2000
+#define Y_CHART_TICK_MAJOR 5
+#define Y_CHART_TICK_MINOR 10
 
 #define X_CHART_TICKS_MAJOR 11
 #define X_CHART_TICKS_MINOR 1
 #define Y_CHART_TICKS_MAJOR 6
 #define Y_CHART_TICKS_MINOR 2
 
+#define X_CHART_COUNT ((Y_CHART_TICK_MAJOR - 1) * Y_CHART_TICK_MINOR + 1)
+
 lv_color_t lv_color_lightblue = LV_COLOR_MAKE(0xa6, 0xd1, 0xd1);
 
 static lv_obj_t * chart;
-static lv_obj_t * latency_label;
+static lv_obj_t * latency_last_label;
+static lv_obj_t * latency_average_label;
+static lv_obj_t * latency_deviation_label;
 static lv_obj_t * productname_label;
 static lv_obj_t * manufacturer_label;
 static lv_obj_t * vidpid_label;
@@ -46,7 +52,6 @@ static lv_obj_t * hid_offsets_label;
 static lv_obj_t * trigger_label;
 static lv_obj_t * trigger_ready_cb;
 
-static size_t chart_point_count = 0;
 static lv_coord_t chart_y_range = 0;
 
 static lv_timer_t * trigger_timer = NULL;
@@ -58,13 +63,9 @@ LV_IMG_DECLARE(xlat_logo);
 
 static void latency_label_update(void)
 {
-    lv_label_set_text_fmt(latency_label, "#%lu: %ldus, avg %ldus, stdev %ldus",
-                          xlat_get_latency_count(LATENCY_GPIO_TO_USB),
-                          xlat_get_latency_us(LATENCY_GPIO_TO_USB),
-                          xlat_get_average_latency(LATENCY_GPIO_TO_USB),
-                          xlat_get_latency_standard_deviation(LATENCY_GPIO_TO_USB)
-                          );
-    lv_obj_align_to(latency_label, chart, LV_ALIGN_OUT_TOP_MID, 0, 0);
+    lv_label_set_text_fmt(latency_last_label, "%0.3f ms", xlat_get_latency_us(LATENCY_GPIO_TO_USB) / 1000.0F);
+    lv_label_set_text_fmt(latency_average_label, "%0.3f ms", xlat_get_average_latency(LATENCY_GPIO_TO_USB) / 1000.0F);
+    lv_label_set_text_fmt(latency_deviation_label, "%ld us", xlat_get_latency_standard_deviation(LATENCY_GPIO_TO_USB));
 }
 
 void gfx_set_device_label(const char * manufacturer, const char * productname, const char *vidpid)
@@ -180,7 +181,6 @@ static void chart_reset(void)
     lv_chart_add_series(chart, lv_color_lightblue, LV_CHART_AXIS_PRIMARY_Y);
     lv_chart_set_x_start_point(chart, ser, 0);
 
-    chart_point_count = 0;
     chart_y_range = Y_CHART_RANGE;
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, chart_y_range);
 
@@ -189,8 +189,6 @@ static void chart_reset(void)
 
 static void chart_update(uint32_t value)
 {
-    chart_point_count++;
-
     // clip to the nearest rounded down 1000
 #if LV_USE_LARGE_COORD
     value = value > (INT32_MAX / 1000 * 1000) ? (INT32_MAX / 1000 * 1000) : value;
@@ -215,16 +213,32 @@ static void chart_update(uint32_t value)
 }
 
 /**
- * Display 1000 data points with zooming and scrolling.
- * See how the chart changes drawing mode (draw only vertical lines) when
- * the points get too crowded.
+ * Override the drawing of the axis label
  */
-void lv_chart_new(lv_coord_t yrange)
+static void chart_draw_event_cb(lv_event_t * e)
+{
+    lv_obj_draw_part_dsc_t * dsc = lv_event_get_draw_part_dsc(e);
+    if (!lv_obj_draw_part_check_type(dsc, &lv_chart_class, LV_CHART_DRAW_PART_TICK_LABEL)) return;
+    // Change the drawing of the Y axis legend
+    if (dsc->id == LV_CHART_AXIS_PRIMARY_Y && dsc->text) {
+        lv_snprintf(dsc->text, dsc->text_length, "%0.1f", dsc->value / 1000.0F);
+    }
+    // Change the drawing of the Y axis legend
+    else if (dsc->id == LV_CHART_AXIS_PRIMARY_X && dsc->text) {
+        lv_snprintf(dsc->text, dsc->text_length, "%ld", xlat_get_latency_count(LATENCY_GPIO_TO_USB) + dsc->value * Y_CHART_TICK_MINOR - ((Y_CHART_TICK_MAJOR - 1) * Y_CHART_TICK_MINOR));
+        //lv_snprintf(dsc->text, dsc->text_length, "%ld", -dsc->value);
+    }
+}
+
+/**
+ * Creates a line chart with a custom Y-axis labeling
+ */
+void lv_chart_new(lv_coord_t xcount, lv_coord_t yrange)
 {
     // Create a chart
     chart = lv_chart_create(lv_scr_act());
     lv_obj_set_size(chart, Y_CHART_SIZE_X, Y_CHART_SIZE_Y);
-    lv_obj_align(chart, LV_ALIGN_CENTER, 20, 10);
+    lv_obj_align(chart, LV_ALIGN_RIGHT_MID, 0, 0);
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, yrange);
 
     // Do not display points on the data
@@ -232,11 +246,17 @@ void lv_chart_new(lv_coord_t yrange)
 
     lv_chart_add_series(chart, lv_color_lightblue, LV_CHART_AXIS_PRIMARY_Y);
 
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_X, 10, 5, X_CHART_TICKS_MAJOR, X_CHART_TICKS_MINOR, true, 20);
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, Y_CHART_TICKS_MAJOR, Y_CHART_TICKS_MINOR, true, 60);
+    // Ticks & subticks for the X-axis, starts & ends with a major tick
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_X, 10, 5, Y_CHART_TICK_MAJOR, Y_CHART_TICK_MINOR, true, 20);
 
-    // Set the amount of data points according to the X axis tick count
-    lv_chart_set_point_count(chart, (X_CHART_TICKS_MAJOR - 1) * X_CHART_TICKS_MINOR + 1);
+    // Ticks & subticks for the Y-axis, starts & ends with a major tick
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, 6, 2, true, 60);
+
+    // Custom axis labeling
+    lv_obj_add_event_cb(chart, chart_draw_event_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+
+    // Set the amout of data points
+    lv_chart_set_point_count(chart, xcount);
 
     chart_y_range = yrange;
 }
@@ -245,6 +265,9 @@ void lv_chart_new(lv_coord_t yrange)
 
 static lv_style_t style_btn;
 static lv_style_t style_chart;
+static lv_style_t style_text_small;
+static lv_style_t style_text_large;
+static lv_style_t style_box;
 
 /*Will be called when the styles of the base theme are already added
   to add new styles*/
@@ -286,6 +309,22 @@ static void new_theme_init_and_set(void)
     lv_style_set_border_color(&style_chart, lv_color_lightblue);
     lv_style_set_border_width(&style_chart, 1);
     lv_style_set_text_color(&style_chart, lv_color_white());
+
+    // Initialize small text
+    lv_style_init(&style_text_small);
+    lv_style_set_text_font(&style_text_small, &lv_font_montserrat_10);
+
+    // Initialize large text
+    lv_style_init(&style_text_large);
+    lv_style_set_text_font(&style_text_large, &lv_font_montserrat_20);
+
+    // Initialize box style
+    lv_style_init(&style_box);
+    lv_style_set_radius(&style_box, 5);
+    lv_style_set_width(&style_box, 115);
+    lv_style_set_height(&style_box, 50);
+    lv_style_set_pad_all(&style_box, 5);
+    lv_style_set_border_color(&style_box, lv_color_white());
 
     /*Initialize the new theme from the current theme*/
     lv_theme_t * th_act = lv_disp_get_theme(NULL);
@@ -405,15 +444,61 @@ static void gfx_xlat_gui(void)
     lv_label_set_text(trigger_label, "TRIGGER");
     lv_obj_center(trigger_label);
 
-    // Latency label
-    latency_label = lv_label_create(lv_scr_act());
-    lv_label_set_text(latency_label, "Click to start measurement...");
-    lv_obj_align_to(latency_label, chart, LV_ALIGN_OUT_TOP_MID, 0, 0);
+    // Latency last average box
+    lv_obj_t * latency_average_box = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(latency_average_box, &style_box, 0);
+    lv_obj_align(latency_average_box, LV_ALIGN_LEFT_MID, 0, 10);
+
+    // Latency last average label
+    latency_average_label = lv_label_create(latency_average_box);
+    lv_obj_add_style(latency_average_label, &style_text_large, 0);
+    lv_obj_align(latency_average_label, LV_ALIGN_TOP_RIGHT, 0, 0);
+    lv_label_set_text(latency_average_label, "0.000 ms");
+
+    // Description average label
+    lv_obj_t * description_average_label = lv_label_create(latency_average_box);
+    lv_obj_add_style(description_average_label, &style_text_small, 0);
+    lv_obj_align(description_average_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_label_set_text(description_average_label, "Average input");
+
+    // Latency last measurement box
+    lv_obj_t * latency_last_box = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(latency_last_box, &style_box, 0);
+    lv_obj_align_to(latency_last_box, latency_average_box, LV_ALIGN_OUT_TOP_LEFT, 0, -5);
+
+    // Latency last measurement label
+    latency_last_label = lv_label_create(latency_last_box);
+    lv_obj_add_style(latency_last_label, &style_text_large, 0);
+    lv_obj_align(latency_last_label, LV_ALIGN_TOP_RIGHT, 0, 0);
+    lv_label_set_text(latency_last_label, "0.000 ms");
+
+    // Description last label
+    lv_obj_t * description_last_label = lv_label_create(latency_last_box);
+    lv_obj_add_style(description_last_label, &style_text_small, 0);
+    lv_obj_align(description_last_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_label_set_text(description_last_label, "Latest input");
+
+    // Latency standard deviation box
+    lv_obj_t * latency_deviation_box = lv_obj_create(lv_scr_act());
+    lv_obj_add_style(latency_deviation_box, &style_box, 0);
+    lv_obj_align_to(latency_deviation_box, latency_average_box, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 5);
+
+    // Latency standard deviation label
+    latency_deviation_label = lv_label_create(latency_deviation_box);
+    lv_obj_add_style(latency_deviation_label, &style_text_large, 0);
+    lv_obj_align(latency_deviation_label, LV_ALIGN_TOP_RIGHT, 0, 0);
+    lv_label_set_text(latency_deviation_label, "0 us");
+
+    // Description last label
+    lv_obj_t * description_deviation_label = lv_label_create(latency_deviation_box);
+    lv_obj_add_style(description_deviation_label, &style_text_small, 0);
+    lv_obj_align(description_deviation_label, LV_ALIGN_BOTTOM_MID, 0, 0);
+    lv_label_set_text(description_deviation_label, "Standard deviation");
 
     ///////////
     // CHART //
     ///////////
-    lv_chart_new(Y_CHART_RANGE);
+    lv_chart_new(X_CHART_COUNT, Y_CHART_RANGE);
     lv_chart_add_cursor(chart, lv_color_white(), LV_DIR_TOP);
 }
 

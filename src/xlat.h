@@ -22,8 +22,8 @@
 #include <stdint.h>
 #include "src/usb/usbh_def.h"
 
-#define AUTO_TRIGGER_PERIOD_MS (150)
-#define AUTO_TRIGGER_PRESSED_PERIOD_MS (30)
+#define AUTO_TRIGGER_PERIOD_MS (500)
+#define AUTO_TRIGGER_PRESSED_PERIOD_MS (100)
 
 typedef struct hid_event {
     USBH_HandleTypeDef *phost;

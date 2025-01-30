@@ -60,6 +60,11 @@ void MX_USB_HOST_Init(void)
   }
 }
 
+void MX_USB_HOST_ReEnumeration(void)
+{
+  USBH_ReEnumerate(&hUsbHostHS);
+}
+
 /*
  * user callback definition
  */

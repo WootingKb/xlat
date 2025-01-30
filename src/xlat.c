@@ -165,7 +165,7 @@ static void hidreport_check_item(HID_ReportItem_t *item)
             switch (item->Attributes.Usage.Usage) {
                 case 0x30:
                     printf("    Usage.Usage: X (0x0030)\n");
-                    if (!x_location.found) {
+                    if (!x_location.found && XLAT_MODE_MOTION == xlat_mode) {
                         x_location.found = true;
                         x_location.bit_index = item->BitOffset;
                         x_location.bit_size = item->Attributes.BitSize;
@@ -176,7 +176,7 @@ static void hidreport_check_item(HID_ReportItem_t *item)
 
                 case 0x31:
                     printf("    Usage.Usage: Y (0x0031)\n");
-                    if (!y_location.found) {
+                    if (!y_location.found && XLAT_MODE_MOTION == xlat_mode) {
                         y_location.found = true;
                         y_location.bit_index = item->BitOffset;
                         y_location.bit_size = item->Attributes.BitSize;
@@ -189,7 +189,7 @@ static void hidreport_check_item(HID_ReportItem_t *item)
 
         case 0x07:
             printf("    Usage.Page:  Keyboard/Keypad (0x0007)\n");
-            if (!key_location.found) {
+            if (!key_location.found && XLAT_MODE_KEY == xlat_mode) {
                 key_location.found = true;
                 key_location.bit_index = item->BitOffset;
 
@@ -199,7 +199,7 @@ static void hidreport_check_item(HID_ReportItem_t *item)
 
         case 0x09:
             printf("    Usage.Page:  Button (0x0009)\n");
-            if (!button_location.found) {
+            if (!button_location.found && XLAT_MODE_CLICK == xlat_mode) {
                 button_location.found = true;
                 button_location.bit_index = item->BitOffset;
 

@@ -51,8 +51,8 @@ typedef enum xlat_mode {
 } xlat_mode_t;
 
 typedef enum xlat_interface {
-    XLAT_INTERFACE_AUTO = -1,
-    XLAT_INTERFACE_0    = 0,
+    XLAT_INTERFACE_AUTO = 0,
+    XLAT_INTERFACE_0,
     XLAT_INTERFACE_1,
     XLAT_INTERFACE_2,
     XLAT_INTERFACE_3,
@@ -62,6 +62,19 @@ typedef enum xlat_interface {
     XLAT_INTERFACE_7,
     XLAT_INTERFACE_8,
 } xlat_interface_t;
+
+typedef enum xlat_reportid {
+    XLAT_REPORTID_AUTO = 0,
+    XLAT_REPORTID_0,
+    XLAT_REPORTID_1,
+    XLAT_REPORTID_2,
+    XLAT_REPORTID_3,
+    XLAT_REPORTID_4,
+    XLAT_REPORTID_5,
+    XLAT_REPORTID_6,
+    XLAT_REPORTID_7,
+    XLAT_REPORTID_8,
+} xlat_reportid_t;
 
 extern volatile bool xlat_initialized;
 
@@ -111,5 +124,8 @@ xlat_interface_t xlat_get_interface_selection();
 
 void xlat_set_found_interface(uint8_t number);
 uint8_t xlat_get_found_interface();
+
+void xlat_set_reportid_selection(xlat_reportid_t number);
+xlat_reportid_t xlat_get_reportid_selection();
 
 #endif //XLAT_H

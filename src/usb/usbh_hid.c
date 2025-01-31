@@ -65,6 +65,7 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     uint8_t max_ep;
     uint8_t num = 0U;
     uint8_t interface;
+    uint8_t reportid;
 
     // Handle the AUTO interface detection mode
     if (XLAT_INTERFACE_AUTO == xlat_get_interface_selection()) {
@@ -110,6 +111,16 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     }
 
     xlat_set_found_interface(interface);
+
+    // Update the report ID to search for
+    if (XLAT_REPORTID_AUTO == xlat_get_reportid_selection()) {
+        reportid = 0xFF;
+    }
+    else {
+        reportid = xlat_get_reportid_selection() - XLAT_REPORTID_0;
+    }
+
+    xlat_set_reportid(reportid);
 
     phost->pActiveClass->pData = (HID_HandleTypeDef *)USBH_malloc(sizeof(HID_HandleTypeDef));
     HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;

@@ -21,8 +21,8 @@ set(CMAKE_ASM_SOURCE_FILE_EXTENSIONS s)
 
 # Define the application version
 set(APP_VERSION_MAJOR 1)
-set(APP_VERSION_MINOR 3)
-set(APP_VERSION_PATCH 99) # patch level 99 = work-in-progress for next release
+set(APP_VERSION_MINOR 4)
+set(APP_VERSION_PATCH 0) # patch level 99 = work-in-progress for next release
 set(APP_VERSION_STRING "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
 
 add_compile_options(
@@ -142,6 +142,7 @@ set(USB_Sources
         src/usb/usbh_pipes.c
         src/usb/usbh_hid.c
         src/usb/usbh_hid_mouse.c
+        src/usb/usbh_hid_keyboard.c
 )
 
 add_definitions(
@@ -175,7 +176,7 @@ add_executable(${PROJECT_NAME}
         src/syscalls.c
         src/system_stm32f7xx.c
         src/xlat.c
-        src/theme/xlat_logo_160px_width_idx8.c
+        src/theme/xlat_fm_logo_130px.c
         drivers/tft/tft.c
         drivers/touchpad/touchpad.c
         ${HAL_Sources}

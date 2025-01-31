@@ -20,6 +20,7 @@
 #include "usbh_core.h"
 #include "usbh_hid.h"
 #include "usb_host.h"
+#include "Common/Common.h"
 
 
 /** @addtogroup USBH_LIB
@@ -480,6 +481,7 @@ USBH_StatusTypeDef USBH_Process(USBH_HandleTypeDef *phost)
 {
   __IO USBH_StatusTypeDef status = USBH_FAIL;
   uint8_t idx = 0U;
+  uint8_t i = 0U;
 
   /* check for Host pending port disconnect event */
   if (phost->device.is_disconnected == 1U)
@@ -708,10 +710,14 @@ USBH_StatusTypeDef USBH_Process(USBH_HandleTypeDef *phost)
 
         for (idx = 0U; idx < USBH_MAX_NUM_SUPPORTED_CLASS; idx++)
         {
-          if (phost->pClass[idx]->ClassCode == phost->device.CfgDesc.Itf_Desc[0].bInterfaceClass)
+          // Check if the device has an interface where the class is supported
+          for (i = 0U; i < USBH_MAX_NUM_INTERFACES; i++)
           {
-            phost->pActiveClass = phost->pClass[idx];
-            break;
+            if (phost->pClass[idx]->ClassCode == phost->device.CfgDesc.Itf_Desc[i].bInterfaceClass)
+            {
+              phost->pActiveClass = phost->pClass[idx];
+              break;
+            }
           }
         }
 
@@ -722,8 +728,11 @@ USBH_StatusTypeDef USBH_Process(USBH_HandleTypeDef *phost)
             phost->gState = HOST_CLASS_REQUEST;
             USBH_UsrLog("%s class started.", phost->pActiveClass->Name);
 
-            /* Inform user that a class has been activated */
-            phost->pUser(phost, HOST_USER_CLASS_SELECTED);
+            if (phost->pUser != NULL)
+            {
+              /* Inform user that a class has been activated */
+              phost->pUser(phost, HOST_USER_CLASS_SELECTED);
+            }
           }
           else
           {
@@ -735,6 +744,12 @@ USBH_StatusTypeDef USBH_Process(USBH_HandleTypeDef *phost)
         {
           phost->gState = HOST_ABORT_STATE;
           USBH_UsrLog("No registered class for this device.");
+
+          if (phost->pUser != NULL)
+            {
+              /* Inform user that a class has been activated */
+              phost->pUser(phost, HOST_USER_NO_SUPPORTED_CLASS);
+            }
         }
       }
 

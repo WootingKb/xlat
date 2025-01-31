@@ -27,6 +27,8 @@ lv_dropdown_t *edge_dropdown;
 lv_slider_t *debounce_dropdown;
 lv_dropdown_t *trigger_dropdown;
 lv_dropdown_t *detection_dropdown;
+lv_dropdown_t *interface_dropdown;
+lv_dropdown_t *reportid_dropdown;
 lv_obj_t *prev_screen = NULL; // Pointer to store previous screen
 
 LV_IMG_DECLARE(xlat_logo);
@@ -92,13 +94,34 @@ static void event_handler(lv_event_t* e)
         else if (obj == (lv_obj_t *)detection_dropdown) {
             // Detection mode changed
             uint16_t sel = lv_dropdown_get_selected(obj);
-            if (sel == 0) {
-                // Click
-                xlat_set_mode(XLAT_MODE_CLICK);
-            } else {
-                // Motion
-                xlat_set_mode(XLAT_MODE_MOTION);
+
+            switch (sel) {
+                // Motion [M]
+                case 1:
+                    xlat_set_mode(XLAT_MODE_MOTION);
+                    break;
+
+                // Key [K]
+                case 2:
+                    xlat_set_mode(XLAT_MODE_KEY);
+                    break;
+
+                // Click [M]
+                case 3:
+                default:
+                    xlat_set_mode(XLAT_MODE_CLICK);
+                    break;
             }
+        }
+        else if (obj == (lv_obj_t *)interface_dropdown) {
+            // Interface number changed
+            uint16_t sel = lv_dropdown_get_selected(obj);
+            xlat_set_interface_selection(sel - 1);
+        }
+        else if (obj == (lv_obj_t *)reportid_dropdown) {
+            // Interface number changed
+            uint16_t sel = lv_dropdown_get_selected(obj);
+            xlat_set_reportid_selection(sel);
         }
         else {
             printf("Unknown event\n");
@@ -123,7 +146,6 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     // Will align this after determining max label width
     lv_obj_add_event_cb((struct _lv_obj_t *) edge_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
 
-
     // Debounce Time Label & Slider
     lv_obj_t *debounce_label = lv_label_create(settings_screen);
     lv_label_set_text(debounce_label, "Debounce Time:");
@@ -133,7 +155,6 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     lv_dropdown_set_options((lv_obj_t *) debounce_dropdown, "20ms\n100ms\n200ms\n500ms\n1000ms");
     // Will align this after determining max label width
     lv_obj_add_event_cb((struct _lv_obj_t *) debounce_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
-
 
     // Auto-Trigger Level Label & Dropdown
     lv_obj_t *trigger_label = lv_label_create(settings_screen);
@@ -145,16 +166,30 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     // Will align this after determining max label width
     lv_obj_add_event_cb((struct _lv_obj_t *) trigger_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
 
-
-    // Click vs. motion detection label
+    // Click, motion & key detection label
     lv_obj_t *detection_mode = lv_label_create(settings_screen);
     lv_label_set_text(detection_mode, "Detection Mode:");
     lv_obj_align_to(detection_mode, trigger_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 30);
 
-    // Click vs. motion detection dropdown
+    // Click, motion & key detection dropdown
     detection_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
-    lv_dropdown_set_options((lv_obj_t *) detection_dropdown, "Click\nMotion");
+    lv_dropdown_set_options((lv_obj_t *) detection_dropdown, "Click [M]\nMotion [M]\nKey [K]");
     lv_obj_add_event_cb((struct _lv_obj_t *) detection_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Interface selection label
+    lv_obj_t *interface_label = lv_label_create(settings_screen);
+    lv_label_set_text(interface_label, "Interface Number:");
+    lv_obj_align_to(interface_label, detection_mode, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 30);
+
+    // Interface selection dropdown
+    interface_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
+    lv_dropdown_set_options((lv_obj_t *) interface_dropdown, "AUTO\n0\n1\n2\n3\n4\n5\n6\n7\n8");
+    lv_obj_add_event_cb((struct _lv_obj_t *) interface_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // ReportID selection dropdown
+    reportid_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
+    lv_dropdown_set_options((lv_obj_t *) reportid_dropdown, "AUTO\n1\n2\n3\n4\n5\n6\n7\n8");
+    lv_obj_add_event_cb((struct _lv_obj_t *) reportid_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
 
     // If we don't add this label, the y-value of the last item will be 0
     lv_obj_t *debounce_label2 = lv_label_create(settings_screen);
@@ -173,6 +208,8 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     lv_obj_align((struct _lv_obj_t *) debounce_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(debounce_label) - 10);
     lv_obj_align((struct _lv_obj_t *) trigger_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(trigger_label) - 10);
     lv_obj_align((struct _lv_obj_t *) detection_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(detection_mode) - 10);
+    lv_obj_align((struct _lv_obj_t *) interface_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(interface_label) - 10);
+    lv_obj_align((struct _lv_obj_t *) reportid_dropdown, LV_ALIGN_DEFAULT, max_width + 2 * widget_gap + lv_obj_get_width((lv_obj_t *)interface_dropdown), lv_obj_get_y(interface_label) - 10);
 
     // Print all y-values for debugging
     //printf("edge_label y: %d\n", lv_obj_get_y(edge_label));
@@ -190,16 +227,17 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
 
     // Version number label in the top right
     lv_obj_t *version_label = lv_label_create(settings_screen);
+
     // Get the version number from APP_VERSION_* defines
     char version_str[30];
     sprintf(version_str, "XLAT v%s", APP_VERSION_FULL);
     lv_label_set_text(version_label, version_str);
     lv_obj_align(version_label, LV_ALIGN_TOP_RIGHT, -10, 10);
 
-
     // Display current settings
     uint32_t debounce_time = xlat_get_gpio_irq_holdoff_us() / 1000;
     uint16_t debounce_index = 0;
+
     switch (debounce_time) {
         case 20:
             debounce_index = 0;
@@ -219,11 +257,11 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
         default:
             break;
     }
+
     lv_dropdown_set_selected((lv_obj_t *) debounce_dropdown, debounce_index);
 
     // Display current detection mode
-    lv_dropdown_set_selected((lv_obj_t *) detection_dropdown, xlat_get_mode() == XLAT_MODE_MOTION);
-
+    lv_dropdown_set_selected((lv_obj_t *) detection_dropdown, xlat_get_mode());
 
     // Display current detection edge
     lv_dropdown_set_selected((lv_obj_t *) edge_dropdown, hw_config_input_trigger_is_rising_edge());
@@ -231,5 +269,9 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     // Display current auto-trigger level
     lv_dropdown_set_selected((lv_obj_t *) trigger_dropdown, xlat_auto_trigger_level_is_high());
 
-}
+    // Display current interface selection
+    lv_dropdown_set_selected((lv_obj_t *) interface_dropdown, xlat_get_interface_selection() + 1);
 
+    // Display current report ID selection
+    lv_dropdown_set_selected((lv_obj_t *) reportid_dropdown, xlat_get_reportid_selection());
+}

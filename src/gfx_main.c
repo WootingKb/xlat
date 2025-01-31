@@ -28,8 +28,12 @@
 #define Y_CHART_SIZE_X 410
 #define Y_CHART_SIZE_Y 130
 
-#define X_CHART_RANGE 1000
 #define Y_CHART_RANGE 2000
+
+#define X_CHART_TICKS_MAJOR 11
+#define X_CHART_TICKS_MINOR 1
+#define Y_CHART_TICKS_MAJOR 6
+#define Y_CHART_TICKS_MINOR 2
 
 lv_color_t lv_color_lightblue = LV_COLOR_MAKE(0xa6, 0xd1, 0xd1);
 
@@ -46,6 +50,7 @@ static size_t chart_point_count = 0;
 static lv_coord_t chart_y_range = 0;
 
 static lv_timer_t * trigger_timer = NULL;
+static lv_timer_t * trigger_timer_turn_off = NULL;
 
 static void chart_reset(void);
 
@@ -68,7 +73,7 @@ void gfx_set_device_label(const char * manufacturer, const char * productname, c
     lv_label_set_text(manufacturer_label, manufacturer);
     lv_label_set_text(productname_label, productname);
 
-    lv_obj_align(manufacturer_label, LV_ALIGN_TOP_RIGHT, 0, 0);
+    lv_obj_align(manufacturer_label, LV_ALIGN_TOP_RIGHT, -5, 5);
     lv_obj_align_to(vidpid_label, manufacturer_label, LV_ALIGN_OUT_LEFT_BOTTOM, -5, 0);
     lv_obj_align_to(productname_label, manufacturer_label, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 5);
 }
@@ -114,12 +119,20 @@ static void auto_trigger_clear_timer(void)
     trigger_timer = NULL;
 }
 
+void auto_trigger_turn_off_callback(lv_timer_t * timer)
+{
+    (void)timer;
+    xlat_auto_trigger_turn_off_action();
+}
+
 void auto_trigger_callback(lv_timer_t * timer)
 {
     char label[20];
     size_t * count = timer->user_data;
 
     xlat_auto_trigger_action();
+    trigger_timer_turn_off = lv_timer_create(auto_trigger_turn_off_callback, AUTO_TRIGGER_PRESSED_PERIOD_MS, NULL);
+    lv_timer_set_repeat_count(trigger_timer_turn_off, 1);
 
     *count = (*count) - 1;
     if (*count) {
@@ -176,11 +189,18 @@ static void chart_reset(void)
 
 static void chart_update(uint32_t value)
 {
-    lv_chart_set_next_value(chart, lv_chart_get_series_next(chart, NULL), (lv_coord_t)value);
-
     chart_point_count++;
 
-    value = value > INT16_MAX ? INT16_MAX : value; // clip to 16-bit signed (lv_coord_t)
+    // clip to the nearest rounded down 1000
+#if LV_USE_LARGE_COORD
+    value = value > (INT32_MAX / 1000 * 1000) ? (INT32_MAX / 1000 * 1000) : value;
+#else
+    value = value > (INT16_MAX / 1000 * 1000) ? (INT16_MAX / 1000 * 1000) : value;
+#endif
+
+    lv_chart_set_next_value(chart, lv_chart_get_series_next(chart, NULL), (lv_coord_t)value);
+
+    // can't overflow because we clipped down to the nearest 1000 within signed while value is unsigned
     value = (value + 999) / 1000 * 1000; // round up to nearest 1000
 
     // update y-axis range if needed
@@ -199,23 +219,24 @@ static void chart_update(uint32_t value)
  * See how the chart changes drawing mode (draw only vertical lines) when
  * the points get too crowded.
  */
-void lv_chart_new(lv_coord_t xrange, lv_coord_t yrange)
+void lv_chart_new(lv_coord_t yrange)
 {
     // Create a chart
     chart = lv_chart_create(lv_scr_act());
     lv_obj_set_size(chart, Y_CHART_SIZE_X, Y_CHART_SIZE_Y);
     lv_obj_align(chart, LV_ALIGN_CENTER, 20, 10);
     lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, yrange);
-    lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_X, 0, xrange);
 
     // Do not display points on the data
     lv_obj_set_style_size(chart, 0, LV_PART_INDICATOR);
 
     lv_chart_add_series(chart, lv_color_lightblue, LV_CHART_AXIS_PRIMARY_Y);
 
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_X, 10, 5, 11, 2, true, 20);
-    // Y-axis: major tick every 1ms
-    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, 5 + 1, 2, true, 60);
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_X, 10, 5, X_CHART_TICKS_MAJOR, X_CHART_TICKS_MINOR, true, 20);
+    lv_chart_set_axis_tick(chart, LV_CHART_AXIS_PRIMARY_Y, 10, 5, Y_CHART_TICKS_MAJOR, Y_CHART_TICKS_MINOR, true, 60);
+
+    // Set the amount of data points according to the X axis tick count
+    lv_chart_set_point_count(chart, (X_CHART_TICKS_MAJOR - 1) * X_CHART_TICKS_MINOR + 1);
 
     chart_y_range = yrange;
 }
@@ -285,12 +306,16 @@ void gfx_set_byte_offsets_text(void)
     hid_data_location_t * button = xlat_get_button_location();
     hid_data_location_t * x = xlat_get_x_location();
     hid_data_location_t * y = xlat_get_y_location();
+    hid_data_location_t * key = xlat_get_key_location();
+    uint8_t               interface = xlat_get_found_interface();
 
-    if (button->found && x->found && y->found) {
-        sprintf(text, "Data: click@%d motion@%d,%d", button->byte_offset, x->byte_offset, y->byte_offset);
+    if (button->found && x->found && y->found && XLAT_MODE_KEY != xlat_get_mode()) {
+        sprintf(text, "Mouse Data (#%d): id%d click@%d motion@%d,%d", interface, xlat_get_reportid(), button->byte_offset, x->byte_offset, y->byte_offset);
+    } else if (key->found && XLAT_MODE_KEY == xlat_get_mode()) {
+        sprintf(text, "Keyboard Data (#%d): id%d pressed@%d", interface, xlat_get_reportid(), key->byte_offset);
     } else {
         // offsets not found
-        sprintf(text, "Data: offsets not found");
+        sprintf(text, (XLAT_MODE_KEY == xlat_get_mode()) ? "Keyboard Data: offsets not found" : "Mouse Data: offsets not found");
     }
 
     lv_checkbox_set_text(hid_offsets_label, text);
@@ -308,7 +333,7 @@ static void gfx_xlat_gui(void)
     // Draw logo
     lv_obj_t * logo = lv_img_create(lv_scr_act());
     lv_img_set_src(logo, &xlat_logo);
-    lv_obj_align(logo, LV_ALIGN_TOP_LEFT, 10, 10);
+    lv_obj_align(logo, LV_ALIGN_TOP_LEFT, 12, 5);
 
     ///////////////////////////
     // DEVICE INFO TOP RIGHT //
@@ -388,7 +413,7 @@ static void gfx_xlat_gui(void)
     ///////////
     // CHART //
     ///////////
-    lv_chart_new(X_CHART_RANGE, Y_CHART_RANGE);
+    lv_chart_new(Y_CHART_RANGE);
     lv_chart_add_cursor(chart, lv_color_white(), LV_DIR_TOP);
 }
 

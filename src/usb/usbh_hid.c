@@ -111,6 +111,8 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
 
     xlat_set_found_interface(interface);
 
+    xlat_set_reportid(xlat_get_reportid_selection());
+
     phost->pActiveClass->pData = (HID_HandleTypeDef *)USBH_malloc(sizeof(HID_HandleTypeDef));
     HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
 

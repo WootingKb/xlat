@@ -45,10 +45,11 @@ static volatile uint_fast8_t gpio_irq_consumer = 0;
 // SETTINGS
 volatile bool           xlat_initialized = false;
 static xlat_mode_t      xlat_mode = XLAT_MODE_CLICK;
-static uint8_t          hid_reportid = 0;
+static uint8_t          hid_reportid = 0xFF;
 static bool             auto_trigger_level_high = false;
 static xlat_interface_t xlat_interface = XLAT_INTERFACE_AUTO;
 static uint8_t          found_interface = 0xFF;
+static xlat_reportid_t  xlat_reportid = XLAT_REPORT_AUTO;
 
 // The Razer optical switches will constantly trigger the GPIO interrupt, while pressed
 // Waveform looks like this in ASCII art:
@@ -160,6 +161,11 @@ static inline void hidreport_print_item(HID_ReportItem_t *item)
 
 static void hidreport_check_item(HID_ReportItem_t *item)
 {
+    // If a report ID is set then only check report item if it belongs to that
+    if (hid_reportid != 0xFF && hid_reportid != item->ReportID) {
+        return;
+    }
+
     switch (item->Attributes.Usage.Page) {
         case 0x01:
             switch (item->Attributes.Usage.Usage) {
@@ -634,6 +640,16 @@ void xlat_reset_latency(void)
         average_latency_us_sum_sq[i] = 0;
         average_latency_us_count[i] = 0;
     }
+}
+
+void xlat_set_reportid_selection(xlat_reportid_t number)
+{
+    xlat_reportid = number;
+}
+
+xlat_reportid_t xlat_get_reportid_selection()
+{
+    return xlat_reportid;
 }
 
 void xlat_set_reportid(uint8_t reportid)

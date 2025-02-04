@@ -200,12 +200,12 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
 
     // Interface selection label
     lv_obj_t *interface_label = lv_label_create(settings_screen);
-    lv_label_set_text(interface_label, "Interface Number:");
+    lv_label_set_text(interface_label, "Report position:");
     lv_obj_align_to(interface_label, detection_mode, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 30);
 
     // Interface selection dropdown
     interface_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
-    lv_dropdown_set_options((lv_obj_t *) interface_dropdown, "AUTO\n0\n1\n2\n3\n4\n5\n6\n7\n8");
+    lv_dropdown_set_options((lv_obj_t *) interface_dropdown, "AUTO if\nif0\nif1\nif2\nif3\nif4\nif5\nif6\nif7\nif8");
     lv_obj_add_event_cb((struct _lv_obj_t *) interface_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
 
     // ReportID selection dropdown

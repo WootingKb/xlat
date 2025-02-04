@@ -267,12 +267,7 @@ static int calculate_gpio_to_usb_time(void)
 
     xlat_add_latency_measurement(us, LATENCY_GPIO_TO_USB);
 
-    // send a message to the gfx thread, to refresh the plot
-    struct gfx_event *evt;
-    evt = osPoolAlloc(gfxevt_pool); // Allocate memory for the message
-    evt->type = GFX_EVENT_MEASUREMENT;
-    evt->value = us;
-    osMessagePut(msgQGfxTask, (uint32_t)evt, 0U);
+    gfx_send_event(GFX_EVENT_MEASUREMENT, us);
 
     return 0;
 }
@@ -760,12 +755,7 @@ void xlat_parse_hid_descriptor(uint8_t *desc, size_t desc_size)
     // Find click and motion data offsets
     check_offsets();
 
-    // Send a message to the gfx thread, to refresh the device info
-    struct gfx_event *evt;
-    evt = osPoolAlloc(gfxevt_pool); // Allocate memory for the message
-    evt->type = GFX_EVENT_HID_DEVICE_CONNECTED;
-    evt->value = 0;
-    osMessagePut(msgQGfxTask, (uint32_t)evt, 0U);
+    gfx_send_event(GFX_EVENT_HID_DEVICE_CONNECTED, 0);
 }
 
 hid_data_location_t * xlat_get_button_location(void)

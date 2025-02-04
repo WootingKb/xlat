@@ -70,36 +70,31 @@ static void USBH_UserProcess  (USBH_HandleTypeDef *phost, uint8_t id)
         case HOST_USER_SELECT_CONFIGURATION:
             break;
 
-        case HOST_USER_DISCONNECTION: {
+        case HOST_USER_DISCONNECTION:
             // Clear offsets
             xlat_clear_locations();
-            // Send a message to the gfx thread, to refresh the device info
-            struct gfx_event *evt;
-            evt = osPoolAlloc(gfxevt_pool); // Allocate memory for the message
-            evt->type = GFX_EVENT_HID_DEVICE_DISCONNECTED;
-            evt->value = 0;
-            osMessagePut(msgQGfxTask, (uint32_t)evt, 0U);
+
+            gfx_send_event(GFX_EVENT_HID_DEVICE_DISCONNECTED, 0);
             break;
+
+        case HOST_USER_CLASS_SELECTED:
+        case HOST_USER_NO_SUPPORTED_CLASS: {
+              // Compose vidpid string
+              uint16_t vid = phost->device.DevDesc.idVendor;
+              uint16_t pid = phost->device.DevDesc.idProduct;
+              memset(vidpid_string, 0, sizeof(vidpid_string));
+              snprintf(vidpid_string, sizeof(vidpid_string), "0x%04X:%04X", vid, pid);
+              vidpid_string[sizeof(vidpid_string) - 1] = '\0';
+
+              gfx_send_event(GFX_EVENT_HID_DEVICE_CONNECTED, 0);
+              break;
         }
 
-        case HOST_USER_NO_SUPPORTED_CLASS:
-        case HOST_USER_CLASS_ACTIVE: {
-            // Compose vidpid string
-            uint16_t vid = phost->device.DevDesc.idVendor;
-            uint16_t pid = phost->device.DevDesc.idProduct;
-            printf("USB device connected: 0x%04X:%04X\n", vid, pid);
-            memset(vidpid_string, 0, sizeof(vidpid_string));
-            snprintf(vidpid_string, sizeof(vidpid_string), "0x%04X:%04X", vid, pid);
-            vidpid_string[sizeof(vidpid_string) - 1] = '\0';
+        case HOST_USER_CLASS_ACTIVE:
+            printf("USB device ready\n");
 
-            // Send a message to the gfx thread, to refresh the device info
-            struct gfx_event *evt;
-            evt = osPoolAlloc(gfxevt_pool); // Allocate memory for the message
-            evt->type = GFX_EVENT_HID_DEVICE_CONNECTED;
-            evt->value = 0;
-            osMessagePut(msgQGfxTask, (uint32_t)evt, 0U);
+            gfx_send_event(GFX_EVENT_HID_DEVICE_READY, 0);
             break;
-        }
 
         case HOST_USER_CONNECTION:
         default:

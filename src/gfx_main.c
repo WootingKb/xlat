@@ -469,11 +469,18 @@ void gfx_task(void)
                 gfx_set_device_label(usb_host_get_manuf_string(),
                                      usb_host_get_product_string(),
                                      usb_host_get_vidpid_string());
-                gfx_set_byte_offsets_text();
+
+                // Fail safe text in the case there is an error
+                lv_checkbox_set_text(hid_offsets_label, "DEVICE IS NOT SUPPORTED");
+                lv_obj_align_to(hid_offsets_label, productname_label, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 5);
                 break;
 
             case GFX_EVENT_HID_DEVICE_DISCONNECTED:
                 gfx_set_device_label("", "No USB device connected", "");
+                gfx_set_byte_offsets_text();
+                break;
+
+            case GFX_EVENT_HID_DEVICE_READY:
                 gfx_set_byte_offsets_text();
                 break;
         }
@@ -495,4 +502,15 @@ void gfx_set_trigger_ready(bool state)
     } else {
         lv_obj_clear_state(trigger_ready_cb, LV_STATE_CHECKED);
     }
+}
+
+void gfx_send_event(gfx_event_t type, int32_t value)
+{
+    // Send a message to the gfx thread, to refresh the device info
+    struct gfx_event *evt;
+    evt = osPoolAlloc(gfxevt_pool); // Allocate memory for the message
+    evt->type = type;
+    evt->value = value;
+
+    osMessagePut(msgQGfxTask, (uint32_t)evt, 0U);
 }

@@ -1080,6 +1080,7 @@ static USBH_StatusTypeDef USBH_HandleEnum(USBH_HandleTypeDef *phost)
         else if (ReqStatus == USBH_NOT_SUPPORTED)
         {
           USBH_UsrLog("Manufacturer : N/A");
+          usb_host_set_manuf_string((char *)"N/A");
           phost->EnumState = ENUM_GET_PRODUCT_STRING_DESC;
 
 #if (USBH_USE_OS == 1U)
@@ -1099,6 +1100,7 @@ static USBH_StatusTypeDef USBH_HandleEnum(USBH_HandleTypeDef *phost)
       else
       {
         USBH_UsrLog("Manufacturer : N/A");
+        usb_host_set_manuf_string((char *)"N/A");
         phost->EnumState = ENUM_GET_PRODUCT_STRING_DESC;
 
 #if (USBH_USE_OS == 1U)

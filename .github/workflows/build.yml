@@ -1,6 +1,7 @@
 name: Build XLAT firmware
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main

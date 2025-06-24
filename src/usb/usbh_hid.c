@@ -401,13 +401,14 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
             }
 
             HID_Handle->state = USBH_HID_POLL;
+            HID_Handle->timer = phost->Timer;
+
             break;
 
         case USBH_HID_POLL: {
             USBH_URBStateTypeDef urbstate = USBH_LL_GetURBState(phost, HID_Handle->InPipe);
             if (urbstate == USBH_URB_DONE) {
                 XferSize = USBH_LL_GetLastXferSize(phost, HID_Handle->InPipe);
-                HID_Handle->state = USBH_HID_GET_DATA; // we got our data, request a new URB right after this
 
                 HAL_GPIO_WritePin(ARDUINO_D4_GPIO_Port, ARDUINO_D4_Pin, GPIO_PIN_SET);
                 HAL_GPIO_WritePin(ARDUINO_D4_GPIO_Port, ARDUINO_D4_Pin, GPIO_PIN_RESET);
@@ -416,13 +417,9 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                 if (XferSize != 0U) {
                     (void)USBH_HID_FifoWrite(&HID_Handle->fifo, HID_Handle->pData, HID_Handle->length);
                     USBH_HID_EventCallback(phost, timestamp); // triggers the main thread with the timestamp of this event
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost); // trigger new GET_DATA
                 } else {
                     // URB done, but not data ready; issue new URB (GET_DATA state)
                     printf("XferSize: %lu ?!\n", XferSize);
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost);
                 }
             } else {
                 /* IN Endpoint Stalled */
@@ -431,14 +428,12 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                     printf("IN EP Stalled\n");
                     if (USBH_ClrFeature(phost, HID_Handle->ep_addr) == USBH_OK) {
                         /* Change state to issue next IN token */
-                        HID_Handle->state = USBH_HID_GET_DATA;
+                        HID_Handle->state = USBH_HID_GET_DATA; // there was an issue so retry
                         trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
                     }
                 } else if (USBH_LL_GetURBState(phost, HID_Handle->InPipe) == USBH_URB_NOTREADY) {
                     // NAK or ERROR: Not ready;
                     // HCD_HC_IN_IRQHandler() should be called soon, and trigger the thread again
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
                     //printf("NotReady\n");
                 }
                 else {
@@ -448,6 +443,16 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                     //printf("URBState: %d\n", USBH_LL_GetURBState(phost, HID_Handle->InPipe));
                 }
             }
+
+            // Trigger new poll if scheduled
+            if (HID_Handle->DataReady == 1)
+            {
+                HID_Handle->DataReady = 0;
+                HID_Handle->state = USBH_HID_GET_DATA;
+
+                trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
+            }
+ 
             break;
         }
 
@@ -466,7 +471,16 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
   */
 USBH_StatusTypeDef USBH_HID_SOFProcess(USBH_HandleTypeDef *phost)
 {
-    //HID_HandleTypeDef *HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
+    HID_HandleTypeDef *HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
+
+    // schedule new poll if the interval is reached this frame
+    if (HID_Handle->state == USBH_HID_POLL)
+    {
+        if ((phost->Timer - HID_Handle->timer) >= HID_Handle->poll)
+        {
+            HID_Handle->DataReady = 1;
+        }
+    }
 
 #if 1
     HAL_GPIO_WritePin(ARDUINO_D6_GPIO_Port, ARDUINO_D6_Pin, 1);

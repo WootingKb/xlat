@@ -154,7 +154,13 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     HID_Handle->length    = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[0].wMaxPacketSize;
     HID_Handle->poll      = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[0].bInterval;
 
-    printf("HID_Handle->poll: %d, HID_MIN_POLL: %d\r\n", HID_Handle->poll, HID_MIN_POLL);
+    // convert high-speed polling interval to the amount of microframes
+    if (USBH_LL_GetSpeed(phost) == USBH_SPEED_HIGH)
+    {
+        HID_Handle->poll = 1 << (HID_Handle->poll - 1);
+    }
+
+    printf("HID_Handle->poll in (micro-)frames: %d, HID_MIN_POLL: %d\r\n", HID_Handle->poll, HID_MIN_POLL);
     if (HID_Handle->poll  < HID_MIN_POLL) {
         HID_Handle->poll = HID_MIN_POLL;
     }

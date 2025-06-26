@@ -66,6 +66,7 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     uint8_t num = 0U;
     uint8_t interface;
     uint8_t reportid;
+    xlat_polling_rate_t new_pollingrate;
 
     // Handle the AUTO interface detection mode
     if (XLAT_INTERFACE_AUTO == xlat_get_interface_selection()) {
@@ -163,6 +164,50 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     printf("HID_Handle->poll in (micro-)frames: %d, HID_MIN_POLL: %d\r\n", HID_Handle->poll, HID_MIN_POLL);
     if (HID_Handle->poll  < HID_MIN_POLL) {
         HID_Handle->poll = HID_MIN_POLL;
+    }
+
+    // overwrite polling rate
+    new_pollingrate = xlat_get_polling_selection();
+
+    switch (new_pollingrate)
+    {
+        // follow the USB spec
+        case XLAT_POLLING_RATE_AUTO:
+            // keep the interval as is
+            break;
+
+        // use Win like intervals
+        case XLAT_POLLING_RATE_WIN_LIKE:
+            switch (HID_Handle->poll)
+            {
+                case 1:
+                    HID_Handle->poll = 1;
+                    break;
+
+                case 2 ... 3:
+                    HID_Handle->poll = 2;
+                    break;
+
+                case 4 ... 7:
+                    HID_Handle->poll = 4;
+                    break;
+
+                case 8 ... 15:
+                    HID_Handle->poll = 8;
+                    break;
+
+                case 16 ... 31:
+                    HID_Handle->poll = 16;
+                    break;
+
+                default:
+                    HID_Handle->poll = 32;
+            }
+            break;
+
+        // use the forced interval
+        default:
+            HID_Handle->poll = 1 << (new_pollingrate - XLAT_POLLING_RATE_1);
     }
 
     /* Check of available number of endpoints */
@@ -740,7 +785,6 @@ HID_TypeTypeDef USBH_HID_GetDeviceType(USBH_HandleTypeDef *phost)
     return type;
 }
 
-
 /**
   * @brief  USBH_HID_GetPollInterval
   *         Return HID device poll time
@@ -764,6 +808,7 @@ uint8_t USBH_HID_GetPollInterval(USBH_HandleTypeDef *phost)
         return 0U;
     }
 }
+
 /**
   * @brief  USBH_HID_FifoInit
   *         Initialize FIFO.

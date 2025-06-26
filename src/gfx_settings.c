@@ -29,6 +29,7 @@ lv_dropdown_t *trigger_dropdown;
 lv_dropdown_t *detection_dropdown;
 lv_dropdown_t *interface_dropdown;
 lv_dropdown_t *reportid_dropdown;
+lv_dropdown_t *polling_dropdown;
 lv_obj_t *prev_screen = NULL; // Pointer to store previous screen
 
 LV_IMG_DECLARE(xlat_logo);
@@ -38,6 +39,8 @@ static void back_btn_event_handler(lv_event_t* e)
 {
     lv_event_code_t code = lv_event_get_code(e);
     if (code == LV_EVENT_CLICKED) {
+        xlat_usb_reenumeration();  // Reenumerate USB device if needed
+
         if (prev_screen) {
             lv_scr_load(prev_screen); // Switch back to the previous screen
             lv_obj_del(settings_screen);  // Delete the settings screen and free its memory
@@ -125,7 +128,7 @@ static void event_handler(lv_event_t* e)
 
                 // interface number
                 default:
-                    xlat_set_interface_selection(XLAT_INTERFACE_0 + sel - 1);
+                    xlat_set_interface_selection(XLAT_INTERFACE_0 + --sel);
                     break;
             }
         }
@@ -141,7 +144,28 @@ static void event_handler(lv_event_t* e)
 
                 // report ID number
                 default:
-                    xlat_set_reportid_selection(XLAT_REPORTID_0 + sel - 1);
+                    xlat_set_reportid_selection(XLAT_REPORTID_0 + --sel);
+                    break;
+            }
+        }
+        else if (obj == (lv_obj_t *)polling_dropdown) {
+            // Interface number changed
+            uint16_t sel = lv_dropdown_get_selected(obj);
+
+            switch (sel) {
+                // AUTO spec
+                case 0:
+                    xlat_set_polling_selection(XLAT_POLLING_RATE_AUTO);
+                    break;
+
+                // Win like
+                case 1:
+                    xlat_set_polling_selection(XLAT_POLLING_RATE_WIN_LIKE);
+                    break;
+
+                // forced interval
+                default:
+                    xlat_set_polling_selection(XLAT_POLLING_RATE_1 + sel - 2);
                     break;
             }
         }
@@ -212,6 +236,13 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     reportid_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
     lv_dropdown_set_options((lv_obj_t *) reportid_dropdown, "AUTO id\nid0\nid1\nid2\nid3\nid4\nid5\nid6\nid7\nid8");
     lv_obj_add_event_cb((struct _lv_obj_t *) reportid_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_set_width((lv_obj_t *) reportid_dropdown, lv_pct(32));
+
+    // Polling rate selection dropdown
+    polling_dropdown = (lv_dropdown_t *) lv_dropdown_create(settings_screen);
+    lv_dropdown_set_options((lv_obj_t *) polling_dropdown, "AUTO USB spec\nAUTO Win like\n1 frame (MAX)\n2 frames\n4 frames\n8 frames\n16 frames\n32 frames");
+    lv_obj_add_event_cb((struct _lv_obj_t *) polling_dropdown, event_handler, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_set_width((lv_obj_t *) polling_dropdown, lv_pct(32));
 
     // If we don't add this label, the y-value of the last item will be 0
     lv_obj_t *debounce_label2 = lv_label_create(settings_screen);
@@ -230,6 +261,7 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
     lv_obj_align((struct _lv_obj_t *) debounce_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(debounce_label) - 10);
     lv_obj_align((struct _lv_obj_t *) trigger_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(trigger_label) - 10);
     lv_obj_align((struct _lv_obj_t *) detection_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(detection_mode) - 10);
+    lv_obj_align((struct _lv_obj_t *) polling_dropdown, LV_ALIGN_DEFAULT, max_width + 2 * widget_gap + lv_obj_get_width((lv_obj_t *)detection_dropdown), lv_obj_get_y(detection_mode) - 10);
     lv_obj_align((struct _lv_obj_t *) interface_dropdown, LV_ALIGN_DEFAULT, max_width + widget_gap, lv_obj_get_y(interface_label) - 10);
     lv_obj_align((struct _lv_obj_t *) reportid_dropdown, LV_ALIGN_DEFAULT, max_width + 2 * widget_gap + lv_obj_get_width((lv_obj_t *)interface_dropdown), lv_obj_get_y(interface_label) - 10);
 
@@ -296,4 +328,7 @@ void gfx_settings_create_page(lv_obj_t *previous_screen)
 
     // Display current report ID selection
     lv_dropdown_set_selected((lv_obj_t *) reportid_dropdown, xlat_get_reportid_selection());
+
+    // Display current report ID selection
+    lv_dropdown_set_selected((lv_obj_t *) polling_dropdown, xlat_get_polling_selection());
 }

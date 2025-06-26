@@ -51,6 +51,8 @@ static bool             auto_trigger_level_high = false;
 static xlat_interface_t xlat_interface = XLAT_INTERFACE_AUTO;
 static uint8_t          found_interface = 0xFF;
 static xlat_reportid_t  xlat_reportid = XLAT_REPORTID_AUTO;
+static bool             need_reenumeration = false;
+static uint8_t          hid_pollingrate = XLAT_POLLING_RATE_WIN_LIKE;
 
 // The Razer optical switches will constantly trigger the GPIO interrupt, while pressed
 // Waveform looks like this in ASCII art:
@@ -640,9 +642,12 @@ void xlat_reset_latency(void)
 
 void xlat_set_reportid_selection(xlat_reportid_t number)
 {
-    xlat_reportid = number;
+    if (xlat_reportid != number)
+    {
+        need_reenumeration = true;
+    }
 
-    MX_USB_HOST_ReEnumeration();
+    xlat_reportid = number;
 }
 
 xlat_reportid_t xlat_get_reportid_selection()
@@ -673,9 +678,12 @@ static void xlat_timer_callback(TimerHandle_t xTimer)
 
 void xlat_set_mode(enum xlat_mode mode)
 {
-    xlat_mode = mode;
+    if (xlat_mode != mode)
+    {
+        need_reenumeration = true;
+    }
 
-    MX_USB_HOST_ReEnumeration();
+    xlat_mode = mode;
 }
 
 enum xlat_mode xlat_get_mode(void)
@@ -711,9 +719,12 @@ bool xlat_auto_trigger_level_is_high(void)
 
 void xlat_set_interface_selection(xlat_interface_t number)
 {
-    xlat_interface = number;
+    if (xlat_interface != number)
+    {
+        need_reenumeration = true;
+    }
 
-    MX_USB_HOST_ReEnumeration();
+    xlat_interface = number;
 }
 
 xlat_interface_t xlat_get_interface_selection()
@@ -805,4 +816,29 @@ void xlat_init(void)
     char buf[50];
     snprintf(buf, sizeof(buf), "count;latency_us;avg_us;stdev_us\r\n");
     vcp_writestr(buf);
+}
+
+void xlat_usb_reenumeration(void)
+{
+    if (need_reenumeration)
+    {
+        MX_USB_HOST_ReEnumeration();
+    }
+
+    need_reenumeration = false;
+}
+
+void xlat_set_polling_selection(xlat_polling_rate_t rate)
+{
+    if (hid_pollingrate != rate)
+    {
+        need_reenumeration = true;
+    }
+
+    hid_pollingrate = rate;
+}
+
+xlat_polling_rate_t xlat_get_polling_selection(void)
+{
+    return hid_pollingrate;
 }

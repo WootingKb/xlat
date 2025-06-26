@@ -76,10 +76,22 @@ typedef enum xlat_reportid {
     XLAT_REPORTID_8,
 } xlat_reportid_t;
 
+typedef enum xlat_polling_rate {
+    XLAT_POLLING_RATE_AUTO = 0,
+    XLAT_POLLING_RATE_WIN_LIKE,
+    XLAT_POLLING_RATE_1,
+    XLAT_POLLING_RATE_2,
+    XLAT_POLLING_RATE_4,
+    XLAT_POLLING_RATE_8,
+    XLAT_POLLING_RATE_16,
+    XLAT_POLLING_RATE_32,
+} xlat_polling_rate_t;
+
 extern volatile bool xlat_initialized;
 
 void xlat_init(void);
 void xlat_usb_hid_event(void);
+void xlat_usb_reenumeration(void);
 
 uint32_t xlat_get_latency_us(enum latency_type type);
 uint32_t xlat_get_average_latency(enum latency_type type);
@@ -127,5 +139,8 @@ uint8_t xlat_get_found_interface();
 
 void xlat_set_reportid_selection(xlat_reportid_t number);
 xlat_reportid_t xlat_get_reportid_selection();
+
+void xlat_set_polling_selection(xlat_polling_rate_t rate);
+xlat_polling_rate_t xlat_get_polling_selection(void);
 
 #endif //XLAT_H

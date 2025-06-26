@@ -341,19 +341,33 @@ static void new_theme_init_and_set(void)
 
 void gfx_set_byte_offsets_text(void)
 {
-    char text[100];
+    char                  text[100];
     hid_data_location_t * button = xlat_get_button_location();
     hid_data_location_t * x = xlat_get_x_location();
     hid_data_location_t * y = xlat_get_y_location();
     hid_data_location_t * key = xlat_get_key_location();
     uint8_t               interface = xlat_get_found_interface();
+    uint16_t              polling_time = usb_host_get_polling_time_in_micro_frames();
+    char                  time[8];
+
+    // Get the polling time
+    if (polling_time < 8)
+    {
+        // Print out the fraction of the millisecond
+        sprintf(time, "%dus", polling_time * 125);
+    }
+    else
+    {
+        // Here it should be only full millisecond
+        sprintf(time, "%dms", polling_time / 8);
+    }
 
     if (x->found && y->found && XLAT_MODE_MOTION == xlat_get_mode()) {
-        sprintf(text, "Motion Data (#%d): id%d motion@%d,%d", interface, xlat_get_reportid(), x->byte_offset, y->byte_offset);
+        sprintf(text, "Motion Data (#%d@%s): id%d motion@%d,%d", interface, time, xlat_get_reportid(), x->byte_offset, y->byte_offset);
     } else if (button->found && XLAT_MODE_CLICK == xlat_get_mode()) {
-        sprintf(text, "Button Data (#%d): id%d click@%d", interface, xlat_get_reportid(), button->byte_offset);
+        sprintf(text, "Button Data (#%d@%s): id%d click@%d", interface, time, xlat_get_reportid(), button->byte_offset);
     } else if (key->found && XLAT_MODE_KEY == xlat_get_mode()) {
-        sprintf(text, "Keyboard Data (#%d): id%d pressed@%d", interface, xlat_get_reportid(), key->byte_offset);
+        sprintf(text, "Keyboard Data (#%d@%s): id%d pressed@%d", interface, time, xlat_get_reportid(), key->byte_offset);
     } else {
         // offsets not found
         sprintf(text, (XLAT_MODE_KEY == xlat_get_mode()) ? "Keyboard Data: offsets not found" : "Mouse Data: offsets not found");

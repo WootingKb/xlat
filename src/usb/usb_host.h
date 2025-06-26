@@ -73,6 +73,8 @@ char * usb_host_get_manuf_string(void);
 
 char * usb_host_get_vidpid_string(void);
 
+uint16_t usb_host_get_polling_time_in_micro_frames(void);
+
 /**
   * @}
   */

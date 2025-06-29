@@ -26,6 +26,7 @@
 #include "stm32f7xx_hal_tim.h"
 #include "hardware_config.h"
 #include "stdio_glue.h"
+#include "usb_host.h"
 
 // LUFA HID Parser
 #define __INCLUDE_FROM_USB_DRIVER // NOLINT(*-reserved-identifier)
@@ -44,12 +45,14 @@ static volatile uint_fast8_t gpio_irq_consumer = 0;
 
 // SETTINGS
 volatile bool           xlat_initialized = false;
-static xlat_mode_t      xlat_mode = XLAT_MODE_CLICK;
 static uint8_t          hid_reportid = 0xFF;
+static xlat_mode_t      xlat_mode = XLAT_MODE_KEY;
 static bool             auto_trigger_level_high = false;
 static xlat_interface_t xlat_interface = XLAT_INTERFACE_AUTO;
 static uint8_t          found_interface = 0xFF;
 static xlat_reportid_t  xlat_reportid = XLAT_REPORTID_AUTO;
+static bool             need_reenumeration = false;
+static uint8_t          hid_pollingrate = XLAT_POLLING_RATE_WIN_LIKE;
 
 // The Razer optical switches will constantly trigger the GPIO interrupt, while pressed
 // Waveform looks like this in ASCII art:
@@ -59,7 +62,7 @@ static xlat_reportid_t  xlat_reportid = XLAT_REPORTID_AUTO;
 //                  \__/  \__/  \__/  \__/
 //
 // Therefore, take a large enough time window to debounce the GPIO interrupt.
-#define GPIO_IRQ_HOLDOFF_US (50 * 1000)  // 20ms;
+#define GPIO_IRQ_HOLDOFF_US (200 * 1000)  // 200 ms;
 static uint32_t gpio_irq_holdoff_us = GPIO_IRQ_HOLDOFF_US;
 static TimerHandle_t xlat_timer_handle;
 
@@ -639,6 +642,11 @@ void xlat_reset_latency(void)
 
 void xlat_set_reportid_selection(xlat_reportid_t number)
 {
+    if (xlat_reportid != number)
+    {
+        need_reenumeration = true;
+    }
+
     xlat_reportid = number;
 }
 
@@ -670,6 +678,11 @@ static void xlat_timer_callback(TimerHandle_t xTimer)
 
 void xlat_set_mode(enum xlat_mode mode)
 {
+    if (xlat_mode != mode)
+    {
+        need_reenumeration = true;
+    }
+
     xlat_mode = mode;
 }
 
@@ -706,6 +719,11 @@ bool xlat_auto_trigger_level_is_high(void)
 
 void xlat_set_interface_selection(xlat_interface_t number)
 {
+    if (xlat_interface != number)
+    {
+        need_reenumeration = true;
+    }
+
     xlat_interface = number;
 }
 
@@ -798,4 +816,29 @@ void xlat_init(void)
     char buf[50];
     snprintf(buf, sizeof(buf), "count;latency_us;avg_us;stdev_us\r\n");
     vcp_writestr(buf);
+}
+
+void xlat_usb_reenumeration(void)
+{
+    if (need_reenumeration)
+    {
+        MX_USB_HOST_ReEnumeration();
+    }
+
+    need_reenumeration = false;
+}
+
+void xlat_set_polling_selection(xlat_polling_rate_t rate)
+{
+    if (hid_pollingrate != rate)
+    {
+        need_reenumeration = true;
+    }
+
+    hid_pollingrate = rate;
+}
+
+xlat_polling_rate_t xlat_get_polling_selection(void)
+{
+    return hid_pollingrate;
 }

@@ -60,6 +60,11 @@ void MX_USB_HOST_Init(void)
   }
 }
 
+void MX_USB_HOST_ReEnumeration(void)
+{
+  USBH_ReEnumerate(&hUsbHostHS);
+}
+
 /*
  * user callback definition
  */
@@ -108,12 +113,10 @@ void usb_host_set_product_string(const char * product)
     product_string[sizeof(product_string) - 1] = '\0';
 }
 
-
 char * usb_host_get_product_string(void)
 {
     return product_string;
 }
-
 
 void usb_host_set_manuf_string(const char * manuf)
 {
@@ -127,8 +130,19 @@ char * usb_host_get_manuf_string(void)
     return manuf_string;
 }
 
-
 char * usb_host_get_vidpid_string(void)
 {
     return vidpid_string;
+}
+
+uint16_t usb_host_get_polling_time_in_micro_frames(void)
+{
+  uint8_t poll_intervall = USBH_HID_GetPollInterval(&hUsbHostHS);
+
+  if (hUsbHostHS.device.speed != USBH_SPEED_HIGH)
+  {
+    poll_intervall *= 8;
+  }
+
+  return poll_intervall;
 }

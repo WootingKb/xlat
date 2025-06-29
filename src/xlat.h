@@ -22,8 +22,8 @@
 #include <stdint.h>
 #include "src/usb/usbh_def.h"
 
-#define AUTO_TRIGGER_PERIOD_MS (150)
-#define AUTO_TRIGGER_PRESSED_PERIOD_MS (30)
+#define AUTO_TRIGGER_PERIOD_MS (500)
+#define AUTO_TRIGGER_PRESSED_PERIOD_MS (100)
 
 typedef struct hid_event {
     USBH_HandleTypeDef *phost;
@@ -47,12 +47,51 @@ typedef enum latency_type {
 typedef enum xlat_mode {
     XLAT_MODE_CLICK,
     XLAT_MODE_MOTION,
+    XLAT_MODE_KEY,
 } xlat_mode_t;
+
+typedef enum xlat_interface {
+    XLAT_INTERFACE_AUTO = 0,
+    XLAT_INTERFACE_0,
+    XLAT_INTERFACE_1,
+    XLAT_INTERFACE_2,
+    XLAT_INTERFACE_3,
+    XLAT_INTERFACE_4,
+    XLAT_INTERFACE_5,
+    XLAT_INTERFACE_6,
+    XLAT_INTERFACE_7,
+    XLAT_INTERFACE_8,
+} xlat_interface_t;
+
+typedef enum xlat_reportid {
+    XLAT_REPORTID_AUTO = 0,
+    XLAT_REPORTID_0,
+    XLAT_REPORTID_1,
+    XLAT_REPORTID_2,
+    XLAT_REPORTID_3,
+    XLAT_REPORTID_4,
+    XLAT_REPORTID_5,
+    XLAT_REPORTID_6,
+    XLAT_REPORTID_7,
+    XLAT_REPORTID_8,
+} xlat_reportid_t;
+
+typedef enum xlat_polling_rate {
+    XLAT_POLLING_RATE_AUTO = 0,
+    XLAT_POLLING_RATE_WIN_LIKE,
+    XLAT_POLLING_RATE_1,
+    XLAT_POLLING_RATE_2,
+    XLAT_POLLING_RATE_4,
+    XLAT_POLLING_RATE_8,
+    XLAT_POLLING_RATE_16,
+    XLAT_POLLING_RATE_32,
+} xlat_polling_rate_t;
 
 extern volatile bool xlat_initialized;
 
 void xlat_init(void);
 void xlat_usb_hid_event(void);
+void xlat_usb_reenumeration(void);
 
 uint32_t xlat_get_latency_us(enum latency_type type);
 uint32_t xlat_get_average_latency(enum latency_type type);
@@ -73,8 +112,8 @@ uint32_t xlat_get_last_usb_timestamp_us(void);
 uint32_t xlat_get_last_button_timestamp_us(void);
 
 
-void xlat_set_using_reportid(bool use_reportid);
-bool xlat_get_using_reportid(void);
+void xlat_set_reportid(uint8_t reportid);
+uint8_t xlat_get_reportid(void);
 
 void xlat_parse_hid_descriptor(uint8_t *desc, size_t desc_size);
 
@@ -84,11 +123,24 @@ enum xlat_mode xlat_get_mode(void);
 hid_data_location_t * xlat_get_button_location(void);
 hid_data_location_t * xlat_get_x_location(void);
 hid_data_location_t * xlat_get_y_location(void);
+hid_data_location_t * xlat_get_key_location(void);
 void xlat_clear_locations(void);
 
 void xlat_auto_trigger_action(void);
 void xlat_auto_trigger_turn_off_action(void);
 void xlat_auto_trigger_level_set(bool high);
 bool xlat_auto_trigger_level_is_high(void);
+
+void xlat_set_interface_selection(xlat_interface_t number);
+xlat_interface_t xlat_get_interface_selection();
+
+void xlat_set_found_interface(uint8_t number);
+uint8_t xlat_get_found_interface();
+
+void xlat_set_reportid_selection(xlat_reportid_t number);
+xlat_reportid_t xlat_get_reportid_selection();
+
+void xlat_set_polling_selection(xlat_polling_rate_t rate);
+xlat_polling_rate_t xlat_get_polling_selection(void);
 
 #endif //XLAT_H

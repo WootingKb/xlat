@@ -20,6 +20,7 @@
 #include "usbh_hid_parser.h"
 #include "xlat.h"
 #include "usbh_hid_mouse.h"
+#include "usbh_hid_keyboard.h"
 
 
 static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost);
@@ -64,13 +65,26 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     uint8_t max_ep;
     uint8_t num = 0U;
     uint8_t interface;
+    uint8_t reportid;
+    xlat_polling_rate_t new_pollingrate;
 
-    // First try to find a Mouse interface, specifically:
-    interface = USBH_FindInterface(phost, phost->pActiveClass->ClassCode, HID_BOOT_CODE, HID_MOUSE_BOOT_CODE);
+    // Handle the AUTO interface detection mode
+    if (XLAT_INTERFACE_AUTO == xlat_get_interface_selection()) {
+        // First try to find a Mouse or Keyboard interface depending on the detection mode, specifically:
+        interface = USBH_FindInterface(phost,
+                                       phost->pActiveClass->ClassCode,
+                                       HID_BOOT_CODE,
+                                       (XLAT_MODE_KEY == xlat_get_mode()) ? HID_KEYBRD_BOOT_CODE : HID_MOUSE_BOOT_CODE);
 
-    // Broaden the search criteria to no specific protocol
-    if (interface == 0xFFU) {
-        interface = USBH_FindInterface(phost, phost->pActiveClass->ClassCode, 0xFFU, 0xFFU);
+        // Broaden the search criteria to no specific protocol
+        if (interface == 0xFFU) {
+            interface = USBH_FindInterface(phost, phost->pActiveClass->ClassCode, 0xFFU, 0xFFU);
+        }
+    }
+    // Use the selected interface
+    else
+    {
+        interface = xlat_get_interface_selection() - XLAT_INTERFACE_0;
     }
 
 #if 0
@@ -97,6 +111,18 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
         return USBH_FAIL;
     }
 
+    xlat_set_found_interface(interface);
+
+    // Update the report ID to search for
+    if (XLAT_REPORTID_AUTO == xlat_get_reportid_selection()) {
+        reportid = 0xFF;
+    }
+    else {
+        reportid = xlat_get_reportid_selection() - XLAT_REPORTID_0;
+    }
+
+    xlat_set_reportid(reportid);
+
     phost->pActiveClass->pData = (HID_HandleTypeDef *)USBH_malloc(sizeof(HID_HandleTypeDef));
     HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
 
@@ -112,14 +138,15 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
 
     /*Decode Bootclass Protocol: Mouse or Keyboard, see HID_KEYBRD_BOOT_CODE, HID_MOUSE_BOOT_CODE */
     if (phost->device.CfgDesc.Itf_Desc[interface].bInterfaceProtocol == HID_KEYBRD_BOOT_CODE) {
-        USBH_UsrLog("KeyBoard device found! (iface: %d)", interface);
+        USBH_UsrLog("Keyboard device found! (iface idx: %d)", interface);
+        HID_Handle->Init = USBH_HID_KeyboardInit;
     } else if (phost->device.CfgDesc.Itf_Desc[interface].bInterfaceProtocol  == HID_MOUSE_BOOT_CODE) {
-        USBH_UsrLog("Mouse device found! (iface: %d)", interface);
+        USBH_UsrLog("Mouse device found! (iface idx: %d)", interface);
         HID_Handle->Init = USBH_HID_MouseInit;
     } else {
-        USBH_UsrLog("bInterfaceProtocol %d not supported. Assuming Mouse... (iface: %d)",
-                    phost->device.CfgDesc.Itf_Desc[interface].bInterfaceProtocol, interface);
-        HID_Handle->Init = USBH_HID_MouseInit;
+        USBH_UsrLog("bInterfaceProtocol %d not supported. Assuming %s... (iface idx: %d)",
+                    phost->device.CfgDesc.Itf_Desc[interface].bInterfaceProtocol, (XLAT_MODE_KEY == xlat_get_mode()) ? "Keyboard" : "Mouse", interface);
+        HID_Handle->Init = (XLAT_MODE_KEY == xlat_get_mode()) ? USBH_HID_KeyboardInit : USBH_HID_MouseInit;
     }
 
     HID_Handle->state     = USBH_HID_INIT;
@@ -127,11 +154,6 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
     HID_Handle->ep_addr   = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[0].bEndpointAddress;
     HID_Handle->length    = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[0].wMaxPacketSize;
     HID_Handle->poll      = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[0].bInterval;
-
-    printf("HID_Handle->poll: %d, HID_MIN_POLL: %d\r\n", HID_Handle->poll, HID_MIN_POLL);
-    if (HID_Handle->poll  < HID_MIN_POLL) {
-        HID_Handle->poll = HID_MIN_POLL;
-    }
 
     /* Check of available number of endpoints */
     /* Find the number of EPs in the Interface Descriptor */
@@ -154,6 +176,11 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
             printf("HID_Handle->InPipe: %d, HID_Handle->InEp: %d, ep_mps: %d\r\n", HID_Handle->InPipe, HID_Handle->InEp, ep_mps);
 
             (void)USBH_LL_SetToggle(phost, HID_Handle->InPipe, 0U);
+
+            // Overwrite endpoint data in the case the IN endpoint wasn't the first endpoint descriptor
+            HID_Handle->ep_addr   = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[num].bEndpointAddress;
+            HID_Handle->length    = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[num].wMaxPacketSize;
+            HID_Handle->poll      = phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[num].bInterval;
         } else {
             HID_Handle->OutEp = (phost->device.CfgDesc.Itf_Desc[interface].Ep_Desc[num].bEndpointAddress);
             HID_Handle->OutPipe  = USBH_AllocPipe(phost, HID_Handle->OutEp);
@@ -167,6 +194,61 @@ static USBH_StatusTypeDef USBH_HID_InterfaceInit(USBH_HandleTypeDef *phost)
 
             (void)USBH_LL_SetToggle(phost, HID_Handle->OutPipe, 0U);
         }
+    }
+
+    // Convert high-speed polling interval to the amount of microframes
+    if (USBH_LL_GetSpeed(phost) == USBH_SPEED_HIGH)
+    {
+        HID_Handle->poll = 1 << (HID_Handle->poll - 1);
+    }
+
+    printf("HID_Handle->poll in (micro-)frames: %d, HID_MIN_POLL: %d\r\n", HID_Handle->poll, HID_MIN_POLL);
+    if (HID_Handle->poll  < HID_MIN_POLL) {
+        HID_Handle->poll = HID_MIN_POLL;
+    }
+
+    // Force polling rate
+    new_pollingrate = xlat_get_polling_selection();
+
+    switch (new_pollingrate)
+    {
+        // Follow the USB spec
+        case XLAT_POLLING_RATE_AUTO:
+            // Keep the interval as is
+            break;
+
+        // Use Win like intervals
+        case XLAT_POLLING_RATE_WIN_LIKE:
+            switch (HID_Handle->poll)
+            {
+                case 1:
+                    HID_Handle->poll = 1;
+                    break;
+
+                case 2 ... 3:
+                    HID_Handle->poll = 2;
+                    break;
+
+                case 4 ... 7:
+                    HID_Handle->poll = 4;
+                    break;
+
+                case 8 ... 15:
+                    HID_Handle->poll = 8;
+                    break;
+
+                case 16 ... 31:
+                    HID_Handle->poll = 16;
+                    break;
+
+                default:
+                    HID_Handle->poll = 32;
+            }
+            break;
+
+        // Use the forced interval
+        default:
+            HID_Handle->poll = 1 << (new_pollingrate - XLAT_POLLING_RATE_1);
     }
 
     return USBH_OK;
@@ -260,8 +342,10 @@ static USBH_StatusTypeDef USBH_HID_ClassRequest(USBH_HandleTypeDef *phost)
             if (classReqStatus == USBH_OK) {
                 HID_Handle->ctl_state = USBH_HID_REQ_IDLE;
 
-                /* all requests performed*/
-                phost->pUser(phost, HOST_USER_CLASS_ACTIVE);
+                if (phost->pUser != NULL) {
+                    /* all requests performed*/
+                    phost->pUser(phost, HOST_USER_CLASS_ACTIVE);
+                }
                 status = USBH_OK;
             } else if (classReqStatus == USBH_NOT_SUPPORTED) {
                 USBH_ErrLog("Control error: HID: Device Set protocol request failed");
@@ -373,13 +457,14 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
             }
 
             HID_Handle->state = USBH_HID_POLL;
+            HID_Handle->timer = phost->Timer;
+
             break;
 
         case USBH_HID_POLL: {
             USBH_URBStateTypeDef urbstate = USBH_LL_GetURBState(phost, HID_Handle->InPipe);
             if (urbstate == USBH_URB_DONE) {
                 XferSize = USBH_LL_GetLastXferSize(phost, HID_Handle->InPipe);
-                HID_Handle->state = USBH_HID_GET_DATA; // we got our data, request a new URB right after this
 
                 HAL_GPIO_WritePin(ARDUINO_D4_GPIO_Port, ARDUINO_D4_Pin, GPIO_PIN_SET);
                 HAL_GPIO_WritePin(ARDUINO_D4_GPIO_Port, ARDUINO_D4_Pin, GPIO_PIN_RESET);
@@ -388,13 +473,9 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                 if (XferSize != 0U) {
                     (void)USBH_HID_FifoWrite(&HID_Handle->fifo, HID_Handle->pData, HID_Handle->length);
                     USBH_HID_EventCallback(phost, timestamp); // triggers the main thread with the timestamp of this event
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost); // trigger new GET_DATA
                 } else {
                     // URB done, but not data ready; issue new URB (GET_DATA state)
                     printf("XferSize: %lu ?!\n", XferSize);
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost);
                 }
             } else {
                 /* IN Endpoint Stalled */
@@ -403,14 +484,12 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                     printf("IN EP Stalled\n");
                     if (USBH_ClrFeature(phost, HID_Handle->ep_addr) == USBH_OK) {
                         /* Change state to issue next IN token */
-                        HID_Handle->state = USBH_HID_GET_DATA;
+                        HID_Handle->state = USBH_HID_GET_DATA; // there was an issue so retry
                         trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
                     }
                 } else if (USBH_LL_GetURBState(phost, HID_Handle->InPipe) == USBH_URB_NOTREADY) {
                     // NAK or ERROR: Not ready;
                     // HCD_HC_IN_IRQHandler() should be called soon, and trigger the thread again
-                    HID_Handle->state = USBH_HID_GET_DATA;
-                    trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
                     //printf("NotReady\n");
                 }
                 else {
@@ -420,6 +499,16 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
                     //printf("URBState: %d\n", USBH_LL_GetURBState(phost, HID_Handle->InPipe));
                 }
             }
+
+            // Trigger new poll if scheduled
+            if (HID_Handle->DataReady == 1)
+            {
+                HID_Handle->DataReady = 0;
+                HID_Handle->state = USBH_HID_GET_DATA;
+
+                trigger_thread_by_os_message(phost); // trigger thread -> proceed to next state immediately
+            }
+ 
             break;
         }
 
@@ -438,7 +527,16 @@ static inline void trigger_thread_by_os_message(USBH_HandleTypeDef *phost)
   */
 USBH_StatusTypeDef USBH_HID_SOFProcess(USBH_HandleTypeDef *phost)
 {
-    //HID_HandleTypeDef *HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
+    HID_HandleTypeDef *HID_Handle = (HID_HandleTypeDef *) phost->pActiveClass->pData;
+
+    // schedule new poll if the interval is reached this frame
+    if (HID_Handle->state == USBH_HID_POLL)
+    {
+        if ((phost->Timer - HID_Handle->timer) >= HID_Handle->poll)
+        {
+            HID_Handle->DataReady = 1;
+        }
+    }
 
 #if 1
     HAL_GPIO_WritePin(ARDUINO_D6_GPIO_Port, ARDUINO_D6_Pin, 1);
@@ -525,7 +623,7 @@ USBH_StatusTypeDef USBH_HID_SetIdle(USBH_HandleTypeDef *phost,
     phost->Control.setup.b.bRequest = USB_HID_SET_IDLE;
     phost->Control.setup.b.wValue.w = (uint16_t)(((uint32_t)duration << 8U) | (uint32_t)reportId);
 
-    phost->Control.setup.b.wIndex.w = 0U;
+    phost->Control.setup.b.wIndex.w = phost->device.current_interface;
     phost->Control.setup.b.wLength.w = 0U;
 
     return USBH_CtlReq(phost, NULL, 0U);
@@ -556,7 +654,7 @@ USBH_StatusTypeDef USBH_HID_SetReport(USBH_HandleTypeDef *phost,
     phost->Control.setup.b.bRequest = USB_HID_SET_REPORT;
     phost->Control.setup.b.wValue.w = (uint16_t)(((uint32_t)reportType << 8U) | (uint32_t)reportId);
 
-    phost->Control.setup.b.wIndex.w = 0U;
+    phost->Control.setup.b.wIndex.w = phost->device.current_interface;
     phost->Control.setup.b.wLength.w = reportLen;
 
     return USBH_CtlReq(phost, reportBuff, (uint16_t)reportLen);
@@ -587,7 +685,7 @@ USBH_StatusTypeDef USBH_HID_GetReport(USBH_HandleTypeDef *phost,
     phost->Control.setup.b.bRequest = USB_HID_GET_REPORT;
     phost->Control.setup.b.wValue.w = (uint16_t)(((uint32_t)reportType << 8U) | (uint32_t)reportId);
 
-    phost->Control.setup.b.wIndex.w = 0U;
+    phost->Control.setup.b.wIndex.w = phost->device.current_interface;
     phost->Control.setup.b.wLength.w = reportLen;
 
     return USBH_CtlReq(phost, reportBuff, (uint16_t)reportLen);
@@ -613,7 +711,7 @@ USBH_StatusTypeDef USBH_HID_SetProtocol(USBH_HandleTypeDef *phost,
         phost->Control.setup.b.wValue.w = 1U;
     }
 
-    phost->Control.setup.b.wIndex.w = 0U;
+    phost->Control.setup.b.wIndex.w = phost->device.current_interface;
     phost->Control.setup.b.wLength.w = 0U;
 
     return USBH_CtlReq(phost, NULL, 0U);
@@ -686,12 +784,11 @@ HID_TypeTypeDef USBH_HID_GetDeviceType(USBH_HandleTypeDef *phost)
         } else if (InterfaceProtocol == HID_MOUSE_BOOT_CODE) {
             type = HID_MOUSE;
         } else {
-            type = HID_MOUSE; // fallback to mouse as well
+            type = HID_UNKNOWN;
         }
     }
     return type;
 }
-
 
 /**
   * @brief  USBH_HID_GetPollInterval
@@ -716,6 +813,7 @@ uint8_t USBH_HID_GetPollInterval(USBH_HandleTypeDef *phost)
         return 0U;
     }
 }
+
 /**
   * @brief  USBH_HID_FifoInit
   *         Initialize FIFO.

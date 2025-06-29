@@ -142,6 +142,7 @@ set(USB_Sources
         src/usb/usbh_pipes.c
         src/usb/usbh_hid.c
         src/usb/usbh_hid_mouse.c
+        src/usb/usbh_hid_keyboard.c
 )
 
 add_definitions(
@@ -175,7 +176,7 @@ add_executable(${PROJECT_NAME}
         src/syscalls.c
         src/system_stm32f7xx.c
         src/xlat.c
-        src/theme/xlat_fm_logo_130px.c
+        src/theme/xlat_logo_160px_width_idx8.c
         drivers/tft/tft.c
         drivers/touchpad/touchpad.c
         ${HAL_Sources}
